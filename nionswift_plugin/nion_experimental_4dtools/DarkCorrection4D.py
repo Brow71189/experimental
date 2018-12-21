@@ -1,6 +1,6 @@
 # system imports
 import gettext
-from nion.swift.model import Symbolic
+from nion.swift.model import Symbolic, DataItem
 from nion.swift import Facade
 
 # local libraries
@@ -183,10 +183,10 @@ class DarkCorrection4DMenuItem:
 
             dark_subtract_area_graphic._graphic.is_bounds_constrained = True
             crop_region._graphic.is_bounds_constrained = True
-
-            dark_corrected_data_item = self.__api.library.create_data_item(title='4D dark correction of ' +
-                                                                                 data_item.title,
-                                                                           large_format=True)
+            dark_corrected_data_item = Facade.DataItem(DataItem.DataItem(large_format=True))
+            self.__api.library._document_model.append_data_item(dark_corrected_data_item._data_item)
+            dark_corrected_data_item._data_item.session_id = self.__api.library._document_model.session_id
+            dark_corrected_data_item.title = '4D dark correction of ' + data_item.title
             computation = self.__api.library.create_computation('nion.dark_correction_4d',
                                                                 inputs={'src1': api_data_item,
                                                                         'src2': total_bin_data_item,
