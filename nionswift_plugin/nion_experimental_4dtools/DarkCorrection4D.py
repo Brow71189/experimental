@@ -1,89 +1,150 @@
 # system imports
 import gettext
-from nion.swift.model import DocumentModel
+from nion.swift.model import Symbolic
 from nion.swift import Facade
 
 # local libraries
 from nion.typeshed import API_1_0 as API
+from nion.data import xdata_1_0 as xd
 
-_ = gettext.gettext
-
-correct_dark_script = """
 import numpy as np
 import uuid
 
-data = src1.xdata.data
-data_shape = np.array(src1.xdata.data.shape)
-dark_area = np.rint(np.array(dark_area_region.bounds) * np.array((data_shape[:2], data_shape[:2]))).astype(np.int)
-crop_area = np.rint(np.array(crop_region.bounds) * np.array((data_shape[2:], data_shape[2:]))).astype(np.int)
+from . import ImageChooser
 
-dark_image = np.mean(data[dark_area[0, 0]:dark_area[0, 0]+dark_area[1, 0],
-                          dark_area[0, 1]:dark_area[0, 1]+dark_area[1, 1],
-                          crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
-                          crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]], axis=(0, 1))
+_ = gettext.gettext
 
-new_data = data[..., crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
-                     crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]] - dark_image
-try:
-    gain_uuid = uuid.UUID(gain_image_uuid)
-except ValueError:
-    pass
-else:
-    gain_image = api.library.get_data_item_by_uuid(gain_uuid)
-    if gain_image:
-        gain_data = gain_image.xdata.data
-        if gain_data.shape == new_data.shape[2:]:
-            new_data *= gain_image.xdata.data
-        elif gain_data.shape == data.shape[2:]:
-            new_data *= gain_image.xdata.data[crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
-                                              crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]]
-        else:
-            raise ValueError('Shape of gain image has to match last two dimensions of input data.')
+class TotalBin4D:
+    def __init__(self, computation, **kwargs):
+        self.computation = computation
 
-if bin_spectrum:
-    target.set_data(np.sum(new_data, axis=-2))
-    target.set_dimensional_calibrations(src1.xdata.dimensional_calibrations[:2] + src1.xdata.dimensional_calibrations[3:])
-else:
-    target.set_data(new_data)
-    target.set_dimensional_calibrations(src1.xdata.dimensional_calibrations[:])
-target.set_intensity_calibration(src1.xdata.intensity_calibration)
-"""
+    def execute(self, src):
+        try:
+            self.__new_xdata = xd.sum(src.xdata, axis=(2, 3))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(str(e))
+            raise
 
-correct_dark_processing_descriptions = {
-    "nion.4d_dark_correction":
-        {'script': correct_dark_script,
-         'sources': [
-                     {'name': 'src1', 'label': 'Source',
-                      'regions': [{'name': 'crop_region', 'type': 'rectangle'}],
-                      'requirements': [{'type': 'dimensionality', 'min': 4, 'max': 4}]},
-                     {'name': 'src2', 'label': 'Total Bin Data Item',
-                      'regions': [{'name': 'dark_area_region', 'type': 'rectangle'}]}
-                     ],
-         'parameters': [{'name': 'bin_spectrum', 'type': 'boolean', 'value_default': True, 'value': True,
-                         'label': 'Bin spectra to 1d'},
-                        {'name': 'gain_image_uuid', 'type': 'string', 'label': 'Gain image uuid', 'value': '',
-                         'value_default': ''}],
-         'title': '4D dark correction'
-         }
-}
+    def commit(self):
+        self.computation.set_referenced_xdata('target', self.__new_xdata)
 
-total_bin_4D_SI_script = """
-import numpy as np
-target.set_data(np.mean(src.xdata.data, axis=(-2, -1)))
-target.set_dimensional_calibrations(src.xdata.dimensional_calibrations[:2])
-target.set_intensity_calibration(src.xdata.intensity_calibration)
-"""
-calculate_average_processing_descriptions = {
-    "nion.total_bin_4d_SI":
-        {'script': total_bin_4D_SI_script,
-         'sources': [
-                     {'name': 'src', 'label': 'Source',
-                      'regions': [],
-                      'requirements': [{'type': 'dimensionality', 'min': 4, 'max': 4}]}
-                     ],
-         'title': 'Total bin 4D'
-         }
-}
+class DarkCorrection4D:
+    def __init__(self, computation, **kwargs):
+        self.computation = computation
+        self.__api = computation.api
+
+        def create_panel_widget(ui, document_controller):
+            def gain_mode_changed(current_item):
+                if current_item != self.computation._computation._get_variable('gain_mode').value:
+                    self.computation._computation._get_variable('gain_mode').value = current_item
+
+            def bin_data_changed(check_state):
+                if self.computation._computation._get_variable('bin_spectrum').value != (check_state == 'checked'):
+                    self.computation._computation._get_variable('bin_spectrum').value = check_state == 'checked'
+
+            def clear_gain_image():
+                variable = self.computation._computation._get_variable('gain_image')
+                if variable.objects_model.items:
+                    variable.objects_model.remove_item(0)
+
+            column = ui.create_column_widget()
+            image_chooser, image_changed_listener = ImageChooser.make_image_chooser(document_controller._document_controller,
+                                                                                    self.computation._computation,
+                                                                                    self.computation._computation._get_variable('gain_image'))
+            self.__image_changed_listener = image_changed_listener
+
+            clear_gain_image_button = ui.create_push_button_widget('Clear')
+
+            gain_mode_label = ui.create_label_widget('Gain correction mode: ')
+            gain_mode_chooser = ui.create_combo_box_widget()
+            gain_mode_chooser.items = ['auto', 'custom', 'off']
+            bin_data_checkbox = ui.create_check_box_widget('Bin data to 1D')
+
+            gain_mode_row = ui.create_row_widget()
+            gain_mode_row.add(gain_mode_label)
+            gain_mode_row.add(gain_mode_chooser)
+            gain_mode_row.add_stretch()
+
+            gain_mode_row2 = ui.create_row_widget()
+            gain_mode_row2.add_stretch()
+            gain_mode_row2._widget.add(image_chooser)
+            gain_mode_row2.add_spacing(5)
+            gain_mode_row2.add(clear_gain_image_button)
+
+            bin_data_row = ui.create_row_widget()
+            bin_data_row.add(bin_data_checkbox)
+            bin_data_row.add_stretch()
+
+            column.add(gain_mode_row)
+            column.add_spacing(10)
+            column.add(gain_mode_row2)
+            column.add_spacing(10)
+            column.add(bin_data_row)
+            column.add_stretch()
+
+            gain_mode_chooser.current_item = self.computation._computation._get_variable('gain_mode').value
+            bin_data_checkbox.checked = self.computation._computation._get_variable('bin_spectrum').value
+
+            clear_gain_image_button.on_clicked = clear_gain_image
+            gain_mode_chooser.on_current_item_changed = gain_mode_changed
+            bin_data_checkbox.on_check_state_changed = bin_data_changed
+
+            return column
+
+        self.computation._computation.create_panel_widget = create_panel_widget
+
+    def execute(self, src1, src2, dark_area_region, crop_region, bin_spectrum, gain_image, gain_mode):
+        try:
+            xdata = src1.xdata
+            metadata = src1.metadata.copy()
+            data_shape = np.array(xdata.data.shape)
+            dark_area = np.rint(np.array(dark_area_region.bounds) * np.array((data_shape[:2], data_shape[:2]))).astype(np.int)
+            crop_area = np.rint(np.array(crop_region.bounds) * np.array((data_shape[2:], data_shape[2:]))).astype(np.int)
+
+            dark_image = xd.sum(xdata[dark_area[0, 0]:dark_area[0, 0]+dark_area[1, 0],
+                                      dark_area[0, 1]:dark_area[0, 1]+dark_area[1, 1],
+                                      crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
+                                      crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]], axis=(0, 1))/(dark_area[1,0]*dark_area[1,1])
+
+            self.__new_xdata = xdata[..., crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
+                                          crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]] - dark_image
+
+            current_gain_image_uuid = metadata.get('hardware_source', {}).get('current_gain_image')
+            current_gain_image = None
+            if current_gain_image_uuid:
+                current_gain_image = self.__api.library.get_data_item_by_uuid(uuid.UUID(current_gain_image_uuid))
+            if metadata.get('hardware_source', {}).get('is_gain_corrected'):
+                if gain_mode in ('custom', 'off') and current_gain_image:
+                    if current_gain_image.xdata.data_shape == xdata.data_shape[2:]:
+                        self.__new_xdata /= current_gain_image.xdata.data[crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
+                                                                          crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]]
+
+            if ((gain_mode == 'auto' and not metadata.get('hardware_source', {}).get('is_gain_corrected') and current_gain_image) or
+                (gain_mode == 'custom' and gain_image)):
+
+                gain_xdata = gain_image[0].xdata if gain_mode == 'custom' else current_gain_image.xdata
+
+                if gain_xdata.data_shape == self.__new_xdata.data_shape[2:]:
+                    self.__new_xdata *= gain_xdata
+                elif gain_xdata.data_shape == xdata.data_shape[2:]:
+                    self.__new_xdata *= gain_xdata.data[crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
+                                                        crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]]
+                else:
+                    raise ValueError('Shape of gain image has to match last two dimensions of input data.')
+                del gain_xdata
+            if bin_spectrum:
+                self.__new_xdata = xd.sum(self.__new_xdata, axis=2)
+
+            self.__new_xdata.metadata.update(metadata)
+        except Exception as e:
+            print(str(e))
+            import traceback
+            traceback.print_exc()
+
+    def commit(self):
+        self.computation.set_referenced_xdata('target', self.__new_xdata)
 
 class DarkCorrection4DMenuItem:
 
@@ -92,8 +153,10 @@ class DarkCorrection4DMenuItem:
     menu_before_id = "window_menu" # optional, specify before menu_id if not a standard menu
     menu_item_name = _("4D Dark Correction")  # menu item name
 
-    DocumentModel.DocumentModel.register_processing_descriptions(correct_dark_processing_descriptions)
-    DocumentModel.DocumentModel.register_processing_descriptions(calculate_average_processing_descriptions)
+    #DocumentModel.DocumentModel.register_processing_descriptions(correct_dark_processing_descriptions)
+    #DocumentModel.DocumentModel.register_processing_descriptions(calculate_average_processing_descriptions)
+    def __init__(self, api):
+        self.__api = api
 
     def menu_item_execute(self, window: API.DocumentWindow) -> None:
         document_controller = window._document_controller
@@ -101,30 +164,43 @@ class DarkCorrection4DMenuItem:
         data_item = (selected_display_item.data_items[0] if
                      selected_display_item and len(selected_display_item.data_items) > 0 else None)
 
-        total_bin_data_item = document_controller.document_model.make_data_item_with_computation(
-            "nion.total_bin_4d_SI", [(selected_display_item, None)],
-            {'src': []})
-        if total_bin_data_item and data_item:
+        if data_item:
+            api_data_item = Facade.DataItem(data_item)
+            total_bin_data_item = self.__api.library.create_data_item(title='Total bin 4D of ' + data_item.title)
+            computation = self.__api.library.create_computation('nion.total_bin_4d_SI',
+                                                                inputs={'src': api_data_item},
+                                                                outputs={'target': total_bin_data_item})
+            computation._computation.source = data_item
+            #computation._computation.mark_update()
+
             total_bin_display_item = document_controller.document_model.get_display_item_for_data_item(
                                                                                                   total_bin_data_item)
             document_controller.show_display_item(total_bin_display_item)
-            api_total_bin_data_item = Facade.DataItem(total_bin_data_item)
-            api_data_item = Facade.DataItem(data_item)
-            dark_subtract_area_graphic = api_total_bin_data_item.add_rectangle_region(0.8, 0.5, 0.4, 1.0)
+            dark_subtract_area_graphic = total_bin_data_item.add_rectangle_region(0.8, 0.5, 0.4, 1.0)
             dark_subtract_area_graphic.label = 'Dark subtract area'
             crop_region = api_data_item.add_rectangle_region(0.5, 0.5, 1.0, 1.0)
             crop_region.label = 'Crop'
-            
+
             dark_subtract_area_graphic._graphic.is_bounds_constrained = True
             crop_region._graphic.is_bounds_constrained = True
-            
-            dark_corrected_data_item = document_controller.document_model.make_data_item_with_computation(
-                    "nion.4d_dark_correction", [(selected_display_item, None), (total_bin_display_item, None)],
-                    {"src1": [crop_region._graphic], "src2": [dark_subtract_area_graphic._graphic]})
-            if dark_corrected_data_item:
-                 dark_corrected_display_item = document_controller.document_model.get_display_item_for_data_item(
+
+            dark_corrected_data_item = self.__api.library.create_data_item(title='4D dark correction of ' +
+                                                                                 data_item.title,
+                                                                           large_format=True)
+            computation = self.__api.library.create_computation('nion.dark_correction_4d',
+                                                                inputs={'src1': api_data_item,
+                                                                        'src2': total_bin_data_item,
+                                                                        'dark_area_region': dark_subtract_area_graphic,
+                                                                        'crop_region': crop_region,
+                                                                        'bin_spectrum': True,
+                                                                        'gain_image': [],
+                                                                        'gain_mode': 'auto'},
+                                                                outputs={'target': dark_corrected_data_item})
+            computation._computation.source = data_item
+
+            dark_corrected_display_item = document_controller.document_model.get_display_item_for_data_item(
                                                                                              dark_corrected_data_item)
-                 document_controller.show_display_item(dark_corrected_display_item)
+            document_controller.show_display_item(dark_corrected_display_item)
 
 class DarkCorrection4DExtension:
 
@@ -135,7 +211,10 @@ class DarkCorrection4DExtension:
         # grab the api object.
         api = api_broker.get_api(version="1", ui_version="1")
         # be sure to keep a reference or it will be closed immediately.
-        self.__menu_item_ref = api.create_menu_item(DarkCorrection4DMenuItem())
+        self.__menu_item_ref = api.create_menu_item(DarkCorrection4DMenuItem(api))
 
     def close(self):
         self.__menu_item_ref.close()
+
+Symbolic.register_computation_type('nion.total_bin_4d_SI', TotalBin4D)
+Symbolic.register_computation_type('nion.dark_correction_4d', DarkCorrection4D)
