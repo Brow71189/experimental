@@ -118,8 +118,8 @@ class DarkCorrection4D:
             if metadata.get('hardware_source', {}).get('is_gain_corrected'):
                 if gain_mode in ('custom', 'off') and current_gain_image:
                     if current_gain_image.xdata.data_shape == xdata.data_shape[2:]:
-                        self.__new_xdata /= current_gain_image.xdata.data[crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
-                                                                          crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]]
+                        self.__new_xdata /= current_gain_image.xdata[crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
+                                                                     crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]]
 
             if ((gain_mode == 'auto' and not metadata.get('hardware_source', {}).get('is_gain_corrected') and current_gain_image) or
                 (gain_mode == 'custom' and gain_image)):
@@ -129,14 +129,23 @@ class DarkCorrection4D:
                 if gain_xdata.data_shape == self.__new_xdata.data_shape[2:]:
                     self.__new_xdata *= gain_xdata
                 elif gain_xdata.data_shape == xdata.data_shape[2:]:
-                    self.__new_xdata *= gain_xdata.data[crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
-                                                        crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]]
+                    self.__new_xdata *= gain_xdata[crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
+                                                   crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]]
                 else:
                     raise ValueError('Shape of gain image has to match last two dimensions of input data.')
                 del gain_xdata
+
             if bin_spectrum:
                 self.__new_xdata = xd.sum(self.__new_xdata, axis=2)
 
+            metadata['nion.dark_correction_4d.parameters'] = {'src1': src1._data_item.write_to_dict(),
+                                                              'src2': src2._data_item.write_to_dict(),
+                                                              'dark_area_region': dark_area_region._graphic.write_to_dict(),
+                                                              'crop_region': crop_region._graphic.write_to_dict(),
+                                                              'bottom_dark_region_region': crop_region._graphic.write_to_dict(),
+                                                              'bin_spectrum': bin_spectrum,
+                                                              'gain_image': gain_image[0].data_item.write_to_dict() if gain_image else None,
+                                                              'gain_mode': gain_mode}
             self.__new_xdata.metadata.update(metadata)
         except Exception as e:
             print(str(e))
@@ -194,10 +203,9 @@ class DarkCorrection4DMenuItem:
                                                                         'crop_region': crop_region,
                                                                         'bin_spectrum': True,
                                                                         'gain_image': [],
-                                                                        'gain_mode': 'auto'},
+                                                                        'gain_mode': 'custom'},
                                                                 outputs={'target': dark_corrected_data_item})
             computation._computation.source = data_item
-
             dark_corrected_display_item = document_controller.document_model.get_display_item_for_data_item(
                                                                                              dark_corrected_data_item)
             document_controller.show_display_item(dark_corrected_display_item)
