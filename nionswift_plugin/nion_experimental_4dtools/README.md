@@ -26,7 +26,7 @@ __________________________________________________________
 ---------------------------
 ### Summary
 This plug-in can be used to process datasets that include dark images either at the beginning or the end. It creates two data items: The first is a 2D image of where every pixel corresponds to the integrated intensity of one frame of the dataset. It is useful to identify the region that is suitable for dark subtraction. The region can be selected by a rectangle region that is displayed in the aforementioned 2D image.
-The second data item created by the plug-in contains the result data. By default the data will be binned in y-direction, so the result will be 3D but this can be changend in the Inspector panel.
+The second data item created by the plug-in contains the result data. By default the data will be binned in y-direction, so the result will be 3D but this can be changend in the Computation panel.
 There is also the option to only work with only a sub-area of the frames of the input data. This can be changed by moving/resizing the "Crop" region displayed in the input data item.
 
 ### Detailed Description
@@ -43,8 +43,9 @@ Parameters:
 
 * Crop: Region displayed in the input data item. It can be used to select a sub-area of the input frames. The output data will then be limited to the data within this region.
 * Dark subtract area: Region displayed in the "total bin 4d" data item. It should be adjusted so that it contains only the pixels that were acquire while the beam was blanked. For large datasets the UI might not be responsive enough to adjust the size and position of the region with the mouse. If this is the case, try to directly type numbers into the correspnding fields in the Inspector panel.
-* Bin spectra to 1D: Checkbox in the Inspector panel. When checked, the output of the plug-in will be a 3D data item with all spectra binned in y-direction.
-* Gain image uuid: Field in the Inspector panel. When it contains a valid data item UUID, this will be used as the gain image for the dataset (applied after dark subtraction but before binning, if enabled). You can get the UUID for a selected data item by clicking Edit -> Copy item uuid or by pressing Ctrl + Shift + U.
+* Bin spectra to 1D: Checkbox in the Computation panel. When checked, the output of the plug-in will be a 3D data item with all spectra binned in y-direction.
+* Gain mode: Drop-down menu in the Computation panel. Defaults to "auto" which means the gain image referenced by the camera plug-in will be used. When set to "custom", the user can drop a data item in the gain image drag-and-drop area (see below) which will then be used. The shape of the gain image provided has to match the shape of the individual images in the dataset in this case. Gain mode can also be set to "off", in which case no gain correction will be applied.
+* Gain image: Drag-and-drop area in the Computation panel. The image contained in this field will be used as gain image if "gain mode" is set to "custom". Clicking on the "Clear" button next to the drag-and-drop area removes the current image from it.
 
 Screenshot:
 
@@ -55,7 +56,7 @@ __________________________________________________________
 Framewise Dark Correction
 ---------------------------------------
 ### Summary
-This plug-in can be used to process datasets that suffer from a rapidly changing static noise pattern like the Orca camera. It creates two data items: The first is the average of all frames of the dataset. This is useful for finding the area of the detector that contains the actual spectrum. The second data item created by the plug-in contains the result data. By default the data will be binned in y-direction, so the result will be 3D but this can be changend in the Inspector panel.
+This plug-in can be used to process datasets that suffer from a rapidly changing static noise pattern like the Orca camera. It creates two data items: The first is the average of all frames of the dataset. This is useful for finding the area of the detector that contains the actual spectrum. The second data item created by the plug-in contains the result data. By default the data will be binned in y-direction, so the result will be 3D but this can be changend in the Computation panel.
 The plug-in will also create 3 regions in the data item that contains the average of all frames. These regions are used to specify the areas of the detector that contain the actual spectrum data and the two areas used for getting the data used for dark subtraction. The data in the dark areas will be binned in y-direction and then subtracted from each line of the corresponding part of the spectrum area.
 
 ### Detailed Description
@@ -72,9 +73,9 @@ Parameters:
 
 * Spectrum: Region displayed in the "frame average" data item. It is used to select the area of the detector that contains the actuals spectrum data. It is possible to crop the spectra in energy (x-) direction  with this region. In this case, the plug-in will use the same energy range for spectrum and top and bottom dark area, i.e. the energy range of the two dark areas is ignored (but not their y-range).
 * Top/Bottom dark area: Regions displayed in the "frame average" data item. They are used to specify the areas of the detector that contain the data used for dark subtraction. The data in "top dark area" will be subtracted from the top part of the spectrum and the data in "bottom dark area" from the bottom part of the spectrum. If the whole part of the spectrum lies above the center of the detector, the "bottom dark area" is ignored (and the other way around).
-* Camera center: In case the center of the detector is not the center of the frames of the dataset you can specify the position of the center here (if you type set it to 0 this would mean that the center is at the very top of the frames). This parameter defaults to -1, which will assume that the center of the frames is also the center of the detector. NOTE: Due to a visual bug in Swift the field that is located on the right side of the slider might not be visible. If you want to type a number for this parameter you can open the "Edit Computation" panel by clicking on "Edit..." in the Inspector and type a number in there.
-* Bin spectra to 1D: Checkbox in the Inspector panel. When checked, the output of the plug-in will be a 3D data item with all spectra binned in y-direction.
-* Gain image uuid: Field in the Inspector panel. When it contains a valid data item UUID, this will be used as the gain image for the dataset (applied after dark subtraction but before binning, if enabled). You can get the UUID for a selected data item by clicking Edit -> Copy item uuid or by pressing Ctrl + Shift + U.
+* Bin spectra to 1D: Checkbox in the Computation panel. When checked, the output of the plug-in will be a 3D data item with all spectra binned in y-direction.
+* Gain mode: Drop-down menu in the Computation panel. Defaults to "auto" which means the gain image referenced by the camera plug-in will be used. When set to "custom", the user can drop a data item in the gain image drag-and-drop area (see below) which will then be used. The shape of the gain image provided has to match the shape of the individual images in the dataset in this case. Gain mode can also be set to "off", in which case no gain correction will be applied.
+* Gain image: Drag-and-drop area in the Computation panel. The image contained in this field will be used as gain image if "gain mode" is set to "custom". Clicking on the "Clear" button next to the drag-and-drop area removes the current image from it.
 
 Screenshot:
 
