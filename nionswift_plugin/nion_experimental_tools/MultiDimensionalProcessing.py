@@ -1118,4 +1118,4 @@ Registry.register_component(AxisChoiceVariableHandlerFactory(), {"variable-handl
 
 
 for computation in [IntegrateAlongAxis, MeasureShifts, ApplyShifts, Crop, MakeTableau, AlignImageSequence]:
-    Symbolic.register_computation_type(computation.computation_id, computation)
+    Symbolic.register_computation_type(typing.cast(typing.Any, computation).computation_id, computation)

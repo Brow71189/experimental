@@ -55,7 +55,7 @@ class FindLocalMaxima(Symbolic.ComputationHandlerLike):
     inputs = {"input_data_item": {"label": _("Input data item"), "data_type": "xdata"},
               "spacing": {"label": _("Spacing")},
               "number_maxima": {"label": _("Number maxima")}}
-    outputs = {}
+    outputs: dict[str, typing.Any] = {}
 
     def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation

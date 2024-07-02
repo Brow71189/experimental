@@ -26,7 +26,7 @@ class _ComputationHandler(Symbolic.ComputationHandlerLike, typing.Protocol):
 
 
 def _create_processing_description_from_computation_handler(handler_class: type[_ComputationHandler]) -> dict[str, typing.Any]:
-    processing_description = {"title": handler_class.label}
+    processing_description: dict[str, typing.Any] = {"title": handler_class.label}
     sources = []
     for key, value in handler_class.inputs.items():
         source = {"name": key}
