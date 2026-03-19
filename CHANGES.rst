@@ -1,6 +1,11 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.20 (2026-03-19)
+-------------------
+- Fix issues with copying display layers when splitting SI sequences.
+- Python 3.14 support. Drop Python 3.11 support.
+
 0.7.19 (2025-09-25)
 -------------------
 - Removed 'center graphics' command, now available in nionswift.
