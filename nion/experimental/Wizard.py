@@ -64,6 +64,7 @@ class AsyncWizardStep:
     depends_on_previous_step: bool = False
     show_output_field: bool = True
     requirements: typing.List[str] = list()
+    show_run_step_button: bool = True
 
     def __init__(self, api: API.API):
         self.api = api
@@ -130,6 +131,7 @@ class AsyncWizardUIHandler(Declarative.Handler):
         self.__requirement_values: dict[str, typing.Any] = dict()
         self.__output_text_listener: typing.Optional[Event.EventListener] = None
         self.__instructions_text_listener: typing.Optional[Event.EventListener] = None
+        self.__requirements_changed_listener: typing.Optional[Event.EventListener] = None
         self.__run_step_button_enabled = True
         self.instructions_background_default_color = '#f0f0f0'
         self.instructions_background_action_color = 'peachpuff'
@@ -153,6 +155,7 @@ class AsyncWizardUIHandler(Declarative.Handler):
             self.__requirement_values[name] = value
             self.property_changed_event.fire(name)
             self.property_changed_event.fire('run_step_button_enabled')
+            self.property_changed_event.fire('requirements_changed')
 
         setattr(AsyncWizardUIHandler, name, property(getter, setter))
 
@@ -356,15 +359,20 @@ class AsyncWizardUIHandler(Declarative.Handler):
     def run_step_button_enabled(self) -> bool:
         if not self.__run_step_button_enabled:
             return False
+        return self.all_requirements_satisfied
+
+
+    @run_step_button_enabled.setter
+    def run_step_button_enabled(self, enabled: bool) -> None:
+        ...
+
+    @property
+    def all_requirements_satisfied(self) -> bool:
         current_step_index = self.current_step_index
         checked = []
         for i in range(len(self.current_step.requirements)):
             checked.append(getattr(self, self._get_requirement_property_name(current_step_index, i)))
         return all(checked)
-
-    @run_step_button_enabled.setter
-    def run_step_button_enabled(self, enabled: bool) -> None:
-        ...
 
     def init_handler(self) -> None:
         self.__task = self.__event_loop.create_task(self.run_current_step())
@@ -386,6 +394,11 @@ class AsyncWizardUIHandler(Declarative.Handler):
         self.__run_step_button_enabled = True
         self.__output_text_listener = self.current_step.property_changed_event.listen(functools.partial(listen_fn, {'output_text'}, {'output_text'}))
         self.__instructions_text_listener = self.current_step.property_changed_event.listen(functools.partial(listen_fn, {'instructions_text'}, {'instructions_text', 'instructions_field_visible', 'instructions_background_color'}))
+        def requirements_changed(name: str) -> None:
+            if name == 'requirements_changed':
+                if not self.current_step.show_run_step_button and self.all_requirements_satisfied:
+                    self.__continue_event.set()
+        self.__requirements_changed_listener = self.property_changed_event.listen(requirements_changed)
         self.canceled_ui_visible = False
         self.cancel_button_visible = True
         self.skip_button_visible = True
@@ -754,9 +767,13 @@ class WizardUI:
         requirements: typing.List[Declarative.UIDescription] = list()
         for i, requirement in enumerate(wizard_step.requirements):
             requirements.append(ui.create_row(ui.create_check_box(text=line_break(requirement), checked=f'@binding({AsyncWizardUIHandler._get_requirement_property_name(wizard_step.step_index, i)})'), ui.create_stretch(), spacing=5, margin=5))
-        if requirements:
+        if requirements and wizard_step.show_run_step_button:
             requirements.insert(0, ui.create_row(ui.create_label(text='Please go through the list of requirements below and click "Run step" once you have checked all boxes.'), ui.create_stretch(), spacing=5, margin=5))
             requirements.append(ui.create_row(ui.create_push_button(text='Run step', on_clicked='run_step_clicked', enabled='@binding(run_step_button_enabled)'), ui.create_stretch(), margin=5, spacing=5))
+            requirements.append(ui.create_stretch())
+        elif requirements:
+            requirements.insert(0, ui.create_row(ui.create_label(text='Please go through the list of requirements below and click "Run step" once you have checked all boxes.'), ui.create_stretch(), spacing=5, margin=5))
+            requirements.append(ui.create_stretch())
         return ui.create_column(*requirements)
 
     def __create_ui_view_v2(self, ui: Declarative.DeclarativeUI, wizard_steps: typing.Sequence[AsyncWizardStep], title: str, has_help: bool) -> Declarative.UIDescription:
