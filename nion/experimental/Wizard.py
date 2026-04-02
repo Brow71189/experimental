@@ -131,7 +131,7 @@ class AsyncWizardUIHandler(Declarative.Handler):
         self.__requirement_values: dict[str, typing.Any] = dict()
         self.__output_text_listener: typing.Optional[Event.EventListener] = None
         self.__instructions_text_listener: typing.Optional[Event.EventListener] = None
-        self.__requirements_changed_listener: typing.Optional[Event.EventListener] = None
+        self.__property_changed_event_listener: typing.Optional[Event.EventListener] = None
         self.__run_step_button_enabled = True
         self.instructions_background_default_color = '#f0f0f0'
         self.instructions_background_action_color = 'peachpuff'
@@ -394,11 +394,11 @@ class AsyncWizardUIHandler(Declarative.Handler):
         self.__run_step_button_enabled = True
         self.__output_text_listener = self.current_step.property_changed_event.listen(functools.partial(listen_fn, {'output_text'}, {'output_text'}))
         self.__instructions_text_listener = self.current_step.property_changed_event.listen(functools.partial(listen_fn, {'instructions_text'}, {'instructions_text', 'instructions_field_visible', 'instructions_background_color'}))
-        def requirements_changed(name: str) -> None:
+        def handle_property_changed(name: str) -> None:
             if name == 'requirements_changed':
                 if not self.current_step.show_run_step_button and self.all_requirements_satisfied:
                     self.__continue_event.set()
-        self.__requirements_changed_listener = self.property_changed_event.listen(requirements_changed)
+        self.__property_changed_event_listener = self.property_changed_event.listen(handle_property_changed)
         self.canceled_ui_visible = False
         self.cancel_button_visible = True
         self.skip_button_visible = True
@@ -772,7 +772,7 @@ class WizardUI:
             requirements.append(ui.create_row(ui.create_push_button(text='Run step', on_clicked='run_step_clicked', enabled='@binding(run_step_button_enabled)'), ui.create_stretch(), margin=5, spacing=5))
             requirements.append(ui.create_stretch())
         elif requirements:
-            requirements.insert(0, ui.create_row(ui.create_label(text='Please go through the list of requirements below and click "Run step" once you have checked all boxes.'), ui.create_stretch(), spacing=5, margin=5))
+            requirements.insert(0, ui.create_row(ui.create_label(text='Please go through the list of requirements below. The wizard will continue once you have checked all boxes.'), ui.create_stretch(), spacing=5, margin=5))
             requirements.append(ui.create_stretch())
         return ui.create_column(*requirements)
 
